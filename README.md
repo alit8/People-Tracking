@@ -1,5 +1,2 @@
 # PersonTracking
-
-Detects and tracks people in video frames
-Estimates people's head poses
-Recognizes people's ages and genders
+Detects and tracks people in video frames, estimates people's head poses and recognizes people's ages and genders
