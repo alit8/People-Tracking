@@ -137,10 +137,11 @@ def estimate_head_pose(img):
     img = transformations(img)
     img_shape = img.size()
     img = img.view(1, img_shape[0], img_shape[1], img_shape[2])
-    img = Variable(img)
 
     if torch.cuda.is_available():
-        img.cuda()
+        img = Variable(img.cuda())
+    else:
+        img = Variable(img)
 
     with torch.no_grad():
         yaw, pitch, roll = head_pose_model(img)
@@ -400,18 +401,19 @@ if __name__ == "__main__":
 
     # detection model
     detection_model, class_names = get_detection_model(args.model)
-    Tensor = torch.FloatTensor
 
     # head pose model
     head_pose_model = get_head_pose_model(args.model)
     idx_tensor = [idx for idx in range(66)]
-    idx_tensor = torch.FloatTensor(idx_tensor)
 
     if torch.cuda.is_available():
-        Tensor.cude()
+        Tensor = torch.cuda.FloatTensor
         detection_model.cuda()
-        idx_tensor.cude()
-        head_pose_model.cude()
+        idx_tensor = torch.cuda.FloatTensor(idx_tensor)
+        head_pose_model.cuda()
+    else:
+        Tensor = torch.FloatTensor
+        idx_tensor = torch.FloatTensor(idx_tensor)
 
     # age model
     age_model = get_age_model(args.model)
