@@ -27,6 +27,8 @@ from pytorch_objectdetecttrack.sort import Sort
 from deep_head_pose import hopenet
 from deep_head_pose.utils import draw_axis
 
+from facelib import AgeGenderEstimator
+
 cmap = plt.get_cmap('tab20b')
 colors = [cmap(i)[:3] for i in np.linspace(0, 1, 20)]
 
@@ -45,32 +47,32 @@ ageList = ['(0-2)', '(4-6)', '(8-12)', '(15-20)', '(25-32)', '(38-43)', '(48-53)
 genderList = ['Male', 'Female']
 
 
-def get_gender_model(model_path):
-    gender_proto = os.path.join(model_path, 'gender_deploy.prototxt')
-    gender_model = os.path.join(model_path, 'gender_net.caffemodel')
-    model = cv2.dnn.readNet(gender_model, gender_proto)
-    return model
+# def get_gender_model(model_path):
+#     gender_proto = os.path.join(model_path, 'gender_deploy.prototxt')
+#     gender_model = os.path.join(model_path, 'gender_net.caffemodel')
+#     model = cv2.dnn.readNet(gender_model, gender_proto)
+#     return model
 
 
-def estimate_gender(blob):
-    gender_model.setInput(blob)
-    gender_preds = gender_model.forward()
-    gender = genderList[gender_preds[0].argmax()]
-    return gender
+# def estimate_gender(blob):
+#     gender_model.setInput(blob)
+#     gender_preds = gender_model.forward()
+#     gender = genderList[gender_preds[0].argmax()]
+#     return gender
 
 
-def get_age_model(model_path):
-    age_proto = os.path.join(model_path, 'age_deploy.prototxt')
-    age_model = os.path.join(model_path, 'age_net.caffemodel')
-    model = cv2.dnn.readNet(age_model, age_proto)
-    return model
+# def get_age_model(model_path):
+#     age_proto = os.path.join(model_path, 'age_deploy.prototxt')
+#     age_model = os.path.join(model_path, 'age_net.caffemodel')
+#     model = cv2.dnn.readNet(age_model, age_proto)
+#     return model
 
 
-def estimate_age(blob):
-    age_model.setInput(blob)
-    age_preds = age_model.forward()
-    age = ageList[age_preds[0].argmax()]
-    return age
+# def estimate_age(blob):
+#     age_model.setInput(blob)
+#     age_preds = age_model.forward()
+#     age = ageList[age_preds[0].argmax()]
+#     return age
 
 
 def get_head_pose_model(model_path):
@@ -193,8 +195,8 @@ def run(args):
 
     # Set scale for birds eye view
     # Bird's eye view will only show ROI
-    bw_width = 400
-    bw_height = 600
+    bw_width = args.bv_width
+    bw_height = args.bv_height
     scale_w = float(bw_width / W)
     scale_h = float(bw_height / H)
 
@@ -231,6 +233,7 @@ def run(args):
         ages = []
         genders = []
         ids = []
+        faces = []
 
         if count == 0:
             image = frame.copy()
@@ -306,11 +309,14 @@ def run(args):
                 draw_axis(frame, yaw, pitch, roll, tdx=(face_x_min + face_x_max) / 2,
                           tdy=(face_y_min + face_y_max) / 2, size=face_height / 2)
 
-                blob = cv2.dnn.blobFromImage(face, 1.0, (227, 227), MODEL_MEAN_VALUES, swapRB=False)
-                age = estimate_age(blob)
-                ages.append(age)
-                gender = estimate_gender(blob)
-                genders.append(gender)
+                face = cv2.resize(face, (112, 112), cv2.INTER_AREA)
+                faces.append(face)
+
+                # blob = cv2.dnn.blobFromImage(face, 1.0, (227, 227), MODEL_MEAN_VALUES, swapRB=False)
+                # age = estimate_age(blob)
+                # ages.append(age)
+                # gender = estimate_gender(blob)
+                # genders.append(gender)
 
                 if oid not in persons.keys():
                     persons[oid] = {}
@@ -323,11 +329,19 @@ def run(args):
                     persons[oid]['gender'] = ''
                     persons[oid]['age'] = ''
 
-                cv2.putText(frame, persons[oid]['age'], (x1, y1 - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
-                cv2.putText(frame, persons[oid]['gender'], (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
+                # cv2.putText(frame, persons[oid]['age'], (x1, y1 - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
+                # cv2.putText(frame, persons[oid]['gender'], (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
 
                 # cv2.imshow('Face', face)
                 # cv2.waitKey(0)
+
+        faces = torch.tensor(faces)
+
+        if torch.cuda.is_available():
+            faces.cuda()
+
+        genders, ages = age_gender_detector.detect(faces)
+        # print(genders, ages)
 
         bv_points, bottom_points = utils.get_transformed_points(boxes, prespective_transform)
 
@@ -339,7 +353,8 @@ def run(args):
             persons[oid]['ages'].append(ages[i])
             persons[oid]['genders'].append(genders[i])
 
-            persons[oid]['age'] = max(set(persons[oid]['ages']), key=persons[oid]['ages'].count)
+            # persons[oid]['age'] = max(set(persons[oid]['ages']), key=persons[oid]['ages'].count)
+            persons[oid]['age'] = int(sum(persons[oid]['ages']) / len(persons[oid]['ages']))
             persons[oid]['gender'] = max(set(persons[oid]['genders']), key=persons[oid]['genders'].count)
 
         bird_image = plot.bird_eye_view(bv_points, ids, bw_width, bw_height, scale_w, scale_h, colors)
@@ -394,6 +409,12 @@ if __name__ == "__main__":
     parser.add_argument('-s', '--save_video', dest='save_video', action='store_true', default=False,
                         help='If this option is used, output video will be saved')
 
+    parser.add_argument('--bv_width', type=int, dest='bv_width', action='store', default=400,
+                        help='Bird view image width')
+
+    parser.add_argument('--bv_height', type=int, dest='bv_height', action='store', default=600,
+                        help='Bird view image height')
+
     args = parser.parse_args()
 
     if not os.path.exists(args.output):
@@ -415,11 +436,8 @@ if __name__ == "__main__":
         Tensor = torch.FloatTensor
         idx_tensor = torch.FloatTensor(idx_tensor)
 
-    # age model
-    age_model = get_age_model(args.model)
-
-    # gender model
-    gender_model = get_gender_model(args.model)
+    # age_gender detector
+    age_gender_detector = AgeGenderEstimator()
 
     # tracker
     mot_tracker = Sort()
