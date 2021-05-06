@@ -230,10 +230,12 @@ def run(args):
 
         boxes = []
         head_poses = []
-        ages = []
-        genders = []
+        # ages = []
+        # genders = []
         ids = []
         faces = []
+        top_lefts = []
+        person_colors = []
 
         if count == 0:
             image = frame.copy()
@@ -290,10 +292,12 @@ def run(args):
 
                 color = colors[oid % len(colors)]
                 color = [i * 255 for i in color]
+                person_colors.append(color)
 
-                cv2.rectangle(frame, (x1, y1), (x1 + box_w, y1 + box_h), color, 1)
-                cv2.putText(frame, str(oid), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.3,
-                            color, 1)
+                if args.show_video:
+                    cv2.rectangle(frame, (x1, y1), (x1 + box_w, y1 + box_h), color, 1)
+                    cv2.putText(frame, str(oid), (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.3,
+                                color, 1)
 
                 face_x_min = int(x1 + box_w * face_w_min)
                 face_x_max = int(x1 + box_w * face_w_max)
@@ -306,8 +310,9 @@ def run(args):
                 yaw, pitch, roll = estimate_head_pose(face)
                 head_poses.append(["{:.2f}".format(yaw), "{:.2f}".format(pitch), "{:.2f}".format(roll)])
 
-                draw_axis(frame, yaw, pitch, roll, tdx=(face_x_min + face_x_max) / 2,
-                          tdy=(face_y_min + face_y_max) / 2, size=face_height / 2)
+                if args.show_video:
+                    draw_axis(frame, yaw, pitch, roll, tdx=(face_x_min + face_x_max) / 2,
+                              tdy=(face_y_min + face_y_max) / 2, size=face_height / 2)
 
                 face = cv2.resize(face, (112, 112), cv2.INTER_AREA)
                 faces.append(face)
@@ -328,6 +333,8 @@ def run(args):
                     persons[oid]['ages'] = []
                     persons[oid]['gender'] = ''
                     persons[oid]['age'] = ''
+
+                top_lefts.append([x1, y1])
 
                 # cv2.putText(frame, persons[oid]['age'], (x1, y1 - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
                 # cv2.putText(frame, persons[oid]['gender'], (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1)
@@ -356,6 +363,10 @@ def run(args):
             # persons[oid]['age'] = max(set(persons[oid]['ages']), key=persons[oid]['ages'].count)
             persons[oid]['age'] = int(sum(persons[oid]['ages']) / len(persons[oid]['ages']))
             persons[oid]['gender'] = max(set(persons[oid]['genders']), key=persons[oid]['genders'].count)
+
+            if args.show_video:
+                cv2.putText(frame, str(persons[oid]['age']), (top_lefts[i][0], top_lefts[i][1] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, person_colors[i], 1)
+                cv2.putText(frame, persons[oid]['gender'], (top_lefts[i][0], top_lefts[i][1] - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.3, person_colors[i], 1)
 
         bird_image = plot.bird_eye_view(bv_points, ids, bw_width, bw_height, scale_w, scale_h, colors)
 
